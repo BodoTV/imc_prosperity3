@@ -4,7 +4,7 @@ from abc import abstractmethod
 from datamodel import Listing, Observation, Order, OrderDepth, ProsperityEncoder, Symbol, Trade, TradingState
 from collections import deque
 
-#this class is written by jmerle and needed for using the visualizer and backtester
+#this class is written by jmerle and needed for using the visualizer and backtester (just ignore)
 class Logger:
     def __init__(self) -> None:
         self.logs = ""
@@ -261,8 +261,18 @@ class RainForestResinStrategy(MarketMakingStrategy):
 
 
 class KelpStrategy(MarketMakingStrategy):
+    #for kelp try a marketmaking strategy with a dynamic default price
     def get_default_price(self, state: TradingState) -> int:
-        return 2025
+        #calculate the average between the most popular buy and sell price
+        order_depths = state.order_depths[self.product]
+        sell_orders = order_depths.sell_orders.items()
+        buy_orders = order_depths.buy_orders.items()
+
+        most_popular_sell_price = min(sell_orders, key = lambda item : item[1])[0]
+        most_popular_buy_price = max(buy_orders, key = lambda item : item[1])[0]
+        
+        #calculate average of those prices
+        return (most_popular_buy_price + most_popular_sell_price)//2
 
 
 class Trader:
