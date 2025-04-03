@@ -316,6 +316,8 @@ class Trader:
         #creates empty dictionary
         new_trader_data = {}
 
+        #need to modify the input of parameters into a specific strategy
+
         #iterate over every product
         for symbol, strategy in self.strategies.items():
             if symbol in old_trader_data:
