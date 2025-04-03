@@ -125,7 +125,7 @@ logger = Logger()
 
 class Strategy:
     def __init__(self, product: str, limit: int):
-        self.product = product
+        self.symbol = product
         self.limit = limit
 
     @abstractmethod
@@ -138,10 +138,10 @@ class Strategy:
         return self.orders
 
     def buy(self, price: int, quantity: int) -> None:
-        self.orders.append(Order(self.product, price, quantity))
+        self.orders.append(Order(self.symbol, price, quantity))
 
     def sell(self, price: int, quantity: int) -> None:
-        self.orders.append(Order(self.product, price, -quantity))
+        self.orders.append(Order(self.symbol, price, -quantity))
 
     #this is for transferring data from one trader to the next
     def save(self) -> JSON:
@@ -154,111 +154,72 @@ class MarketMakingStrategy(Strategy):
     def __init__(self, product: str, limit: int):
         super().__init__(product, limit)
 
-        self.history = deque()
-        self.history_size = 10
+        self.window = deque()
+        self.window_size = 10
 
     def act(self, state: TradingState) -> None:
-        ##Logic
-        #sort buy and sell orders on the market for later use
-        #this priotizes the cheapest sell offer and the highest buy offers
-        buy_orders = sorted(state.order_depths[self.product].buy_orders.items(), reverse = True)
-        sell_orders = sorted(state.order_depths[self.product].sell_orders.items())
+        true_value = self.get_default_price(state)
 
-        position = state.position.get(self.product, 0)
+        order_depth = state.order_depths[self.symbol]
+        buy_orders = sorted(order_depth.buy_orders.items(), reverse=True)
+        sell_orders = sorted(order_depth.sell_orders.items())
 
-        #how much we can buy/sell of this specific product
+        position = state.position.get(self.symbol, 0)
         to_buy = self.limit - position
         to_sell = self.limit + position
 
-        default_price = self.get_default_price(state)
+        self.window.append(abs(position) == self.limit)
+        if len(self.window) > self.window_size:
+            self.window.popleft()
 
-        #if we are completely short or long than add a true to the history
-        self.history.append(abs(position) == self.limit)
-        
-        #if history is full remove first element
-        if len(self.history) > self.history_size:
-            self.history.popleft()
+        soft_liquidate = len(self.window) == self.window_size and sum(self.window) >= self.window_size / 2 and self.window[-1]
+        hard_liquidate = len(self.window) == self.window_size and all(self.window)
 
-        #define if we want to hard or soft liquidate (default to false if the history isnt full)
-        #soft: if more than half of the history is true and the last one is true
-        soft_liquidate = len(self.history) == self.history_size and sum(self.history) >= self.history_size / 2 and self.history[-1]
-        #hard: if all of the history is true
-        hard_liquidate = len(self.history) == self.history_size and all(self.history)
+        max_buy_price = true_value - 1 if position > self.limit * 0.5 else true_value
+        min_sell_price = true_value + 1 if position < self.limit * -0.5 else true_value
 
-        #now we want to define if we want to buy or sell more depending on how full our position is
-        #we can regulate the prob. of buying and selling by increasing/decreasing the max_buy_price/min_sell_price
-
-        #buy less likely if position to long
-        max_buy_price = default_price - 1 if position > self.limit * 0.5 else default_price
-
-        #sell less likely if position is to short
-        min_sell_price = default_price + 1 if position < self.limit * -0.5 else default_price  
-
-        #buy as much as possible below the max_buy_price starting with cheaper offers first
         for price, volume in sell_orders:
-            if price <= max_buy_price and to_buy > 0:
-                #buy as much as possible, either restricted by limit or by order volume
-                quantity = min(-volume, to_buy)
+            if to_buy > 0 and price <= max_buy_price:
+                quantity = min(to_buy, -volume)
                 self.buy(price, quantity)
                 to_buy -= quantity
-                
-        #do the hard liquidation for buying --> we are very short
+
         if to_buy > 0 and hard_liquidate:
-            #buy half of whats possible for the default price of that product
             quantity = to_buy // 2
-            self.buy(default_price, quantity)
+            self.buy(true_value, quantity)
             to_buy -= quantity
 
-        #do the soft liquidation for buying --> we are short but not that short
         if to_buy > 0 and soft_liquidate:
-            #buy half of whats possible for the default price of that product - some value
-            #this makes buying less likely
-            quantity = to_buy //2
-            self.buy(default_price - 2, quantity)
+            quantity = to_buy // 2
+            self.buy(true_value - 2, quantity)
             to_buy -= quantity
 
-        #do the normal buying without hard or soft liquidation
-        #for this we need to know the most popular buy price
         if to_buy > 0:
-            #this finds the buy price of the highest volume
-            most_popular_price = max(buy_orders, key = lambda item: item[1])[0]
-            #now we either buy at this price + 1 or the max_buy_price depending on whats smaller
-            #--> we never buy over the max_buy_price
-            price = min(max_buy_price, most_popular_price + 1)
-            #now we buy as much as possible at this price
+            popular_buy_price = max(buy_orders, key=lambda tup: tup[1])[0]
+            price = min(max_buy_price, popular_buy_price + 1)
             self.buy(price, to_buy)
 
-        #sell as much as possible above the min_sell_price starting with the highest offer first
         for price, volume in buy_orders:
-            if price >= min_sell_price and to_sell > 0:
-                #sell as much as possible, either restriced by limit or by order volume
-                quantity = min(volume, to_buy)
+            if to_sell > 0 and price >= min_sell_price:
+                quantity = min(to_sell, volume)
                 self.sell(price, quantity)
                 to_sell -= quantity
 
-        #now do the hard liquidation for selling --> we are completely long
-        if to_sell > 0 and hard_liquidate:            
-            #sell half of whats possible at default price
+        if to_sell > 0 and hard_liquidate:
             quantity = to_sell // 2
-            self.sell(default_price, quantity)
+            self.sell(true_value, quantity)
             to_sell -= quantity
 
-        #now do the soft liquidation for selling --> we are very short
         if to_sell > 0 and soft_liquidate:
-            #sell half of whats possible at default price + some value making it less likely
             quantity = to_sell // 2
-            self.sell (default_price + 2, quantity)
+            self.sell(true_value + 2, quantity)
             to_sell -= quantity
 
-        #now do the normal selling at the most popular selling price
         if to_sell > 0:
-            #find sell price with highest volume (this means the smallest volume)
-            most_popular_price = min(sell_orders, key = lambda item: item[1])[0]
-            #now we either sell at the most_popular_price or at the min_sell_price what ever is higher
-            #-> we never sell under the min_sell_price
-            price = max(min_sell_price, most_popular_price - 1)
-            #now sell as much as possible for this price
+            popular_sell_price = min(sell_orders, key=lambda tup: tup[1])[0]
+            price = max(min_sell_price, popular_sell_price - 1)
             self.sell(price, to_sell)
+
 
     @abstractmethod
     def get_default_price(self, state: TradingState) -> int:
@@ -266,11 +227,11 @@ class MarketMakingStrategy(Strategy):
     
     #this saves the current history
     def save(self) -> JSON:
-        return list(self.history)
+        return list(self.window)
     
     #this can load a history
     def load(self, data : JSON) -> None:
-        self.history = deque(data)
+        self.window = deque(data)
 
 
 class RainForestResinStrategy(MarketMakingStrategy):
@@ -282,7 +243,7 @@ class KelpStrategy(MarketMakingStrategy):
     #for kelp try a marketmaking strategy with a dynamic default price
     def get_default_price(self, state: TradingState) -> int:
         #calculate the average between the most popular buy and sell price
-        order_depths = state.order_depths[self.product]
+        order_depths = state.order_depths[self.symbol]
         sell_orders = order_depths.sell_orders.items()
         buy_orders = order_depths.buy_orders.items()
 
