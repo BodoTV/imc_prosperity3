@@ -12,7 +12,7 @@ class Logger:
     def __init__(self) -> None:
         self.logs = ""
         self.max_log_length = 3750
-
+# Test
     def print(self, *objects: Any, sep: str = " ", end: str = "\n") -> None:
         self.logs += sep.join(map(str, objects)) + end
 
