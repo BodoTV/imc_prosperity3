@@ -4,6 +4,7 @@ from abc import abstractmethod
 from datamodel import Listing, Observation, Order, OrderDepth, ProsperityEncoder, Symbol, Trade, TradingState
 from collections import deque
 from typing import Any, TypeAlias
+import numpy as np
 
 #this sets JSON as the type alias for everything that can be a json
 JSON: TypeAlias = dict[str, "JSON"] | list["JSON"] | str | int | float | bool | None
@@ -156,6 +157,7 @@ class MarketMakingStrategy(Strategy):
 
         self.history = deque()
         self.history_size = 10
+        self.mid_price_history = deque()
 
     def act(self, state: TradingState) -> None:
         ##Logic
@@ -164,6 +166,13 @@ class MarketMakingStrategy(Strategy):
         buy_orders = sorted(state.order_depths[self.product].buy_orders.items(), reverse = True)
         sell_orders = sorted(state.order_depths[self.product].sell_orders.items())
 
+        # Find best bid (highest price someone is willing to buy at)
+        best_bid = buy_orders[0][0] if buy_orders else None
+
+        # Find best ask (lowest price someone is willing to sell at)
+        best_ask = sell_orders[0][0] if sell_orders else None
+
+        # Current position for product
         position = state.position.get(self.product, 0)
 
         #how much we can buy/sell of this specific product
@@ -188,12 +197,28 @@ class MarketMakingStrategy(Strategy):
         #now we want to define if we want to buy or sell more depending on how full our position is
         #we can regulate the prob. of buying and selling by increasing/decreasing the max_buy_price/min_sell_price
 
+        if best_bid is not None and best_ask is not None:
+            mid_price = (best_bid + best_ask) / 2
+            self.mid_price_history.append(mid_price)
+
+            # Limit history size
+            if len(self.mid_price_history) > self.history_size:
+                self.mid_price_history.popleft()
+
+            # Compute rolling volatility
+            volatility = np.std(self.mid_price_history) if len(self.mid_price_history) > 1 else 0
+        else:
+            volatility = 0  # No valid bid/ask prices
+       
+        # Adjust spread dynamically based on volatility
+        spread_adjustment = volatility * 0.5  # scale as needed
+        
+
         #buy less likely if position to long
-        max_buy_price = default_price - 1 if position > self.limit * 0.5 else default_price
+        max_buy_price = default_price - 1 - spread_adjustment if position > self.limit * 0.5 else default_price - spread_adjustment
 
         #sell less likely if position is to short
-        min_sell_price = default_price + 1 if position < self.limit * -0.5 else default_price  
-
+        min_sell_price = default_price + 1 + spread_adjustment if position < self.limit * -0.5 else default_price + spread_adjustment
         #buy as much as possible below the max_buy_price starting with cheaper offers first
         for price, volume in sell_orders:
             if price <= max_buy_price and to_buy > 0:
