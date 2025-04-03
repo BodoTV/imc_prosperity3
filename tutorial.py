@@ -151,11 +151,14 @@ class Strategy:
         pass
 
 class MarketMakingStrategy(Strategy):
-    def __init__(self, product: str, limit: int):
+    def __init__(self, 
+                 product: str, limit: int, 
+                 strategy_args):
         super().__init__(product, limit)
 
         self.history = deque()
-        self.history_size = 10
+        self.history_size = strategy_args.get("history_size", 10)
+        self.soft_liquidate_thresh = strategy_args.get("soft_liquidation_tresh", 0.5)
 
     def act(self, state: TradingState) -> None:
         ##Logic
@@ -181,9 +184,12 @@ class MarketMakingStrategy(Strategy):
 
         #define if we want to hard or soft liquidate (default to false if the history isnt full)
         #soft: if more than half of the history is true and the last one is true
-        soft_liquidate = len(self.history) == self.history_size and sum(self.history) >= self.history_size / 2 and self.history[-1]
+        soft_liquidate = len(self.history) == self.history_size and sum(self.history) >= self.history_size * self.soft_liquidate_thresh and self.history[-1]
         #hard: if all of the history is true
         hard_liquidate = len(self.history) == self.history_size and all(self.history)
+
+        #calculate spread depending on volatility of the 
+
 
         #now we want to define if we want to buy or sell more depending on how full our position is
         #we can regulate the prob. of buying and selling by increasing/decreasing the max_buy_price/min_sell_price
@@ -294,15 +300,16 @@ class KelpStrategy(MarketMakingStrategy):
 
 
 class Trader:
-    def __init__(self) -> None:
+    def __init__(self, strategy_args = None) -> None:
         #Define the limits and goods traded in the given round, this need to be changed for every submission
         limits = {
             "RAINFOREST_RESIN": 50,
             "KELP" : 50
         }
 
+        self.strategy_args = strategy_args if strategy_args != None else {}
         #Define a strategy for every product, this is done by creating an instance of a specific strategy for every product
-        self.strategies = { symbol : strategyClass(symbol, limits[symbol]) for symbol, strategyClass in {
+        self.strategies = { symbol : strategyClass(symbol, limits[symbol], self.strategy_args.get(symbol, {})) for symbol, strategyClass in {
             "RAINFOREST_RESIN" : RainForestResinStrategy,
             "KELP" : KelpStrategy
         }.items()}
