@@ -1,3 +1,4 @@
 backtests/*
 __pycache__/*
 submissions/*
+*.json
