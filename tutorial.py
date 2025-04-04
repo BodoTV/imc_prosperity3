@@ -197,6 +197,27 @@ class MarketMakingStrategy(Strategy):
         #now we want to define if we want to buy or sell more depending on how full our position is
         #we can regulate the prob. of buying and selling by increasing/decreasing the max_buy_price/min_sell_price
 
+
+        ## ------------- ADDITIONAL METHODS --------------------
+
+        ## Calculate imbalance factor, NOT ACTIVE (useless, set scaling factor to 0)
+
+        # Compute order book imbalance: (buy volume - sell volume) / (buy volume + sell volume)
+        total_buy_volume = sum(volume[1] for volume in buy_orders)
+        total_sell_volume = sum(-volume[1] for volume in sell_orders)
+
+        order_imbalance = 0
+        if (total_buy_volume + total_sell_volume) > 0:
+            order_imbalance = (total_buy_volume - total_sell_volume) / (total_buy_volume + total_sell_volume)
+
+        # Use imbalance to adjust spreads
+        imbalance_factor = order_imbalance * 0 # Scale factor, can be fine-tuned
+
+
+
+        ## Volatility factor for dynamic adjustment of max_buy_price/min_sell_price, ACTIVE
+
+        # Calculate volatility by taking std of best-bid-ask mean over history to account for fluctuations
         if best_bid is not None and best_ask is not None:
             mid_price = (best_bid + best_ask) / 2
             self.mid_price_history.append(mid_price)
@@ -211,13 +232,37 @@ class MarketMakingStrategy(Strategy):
             volatility = 0  # No valid bid/ask prices
        
         # Adjust spread dynamically based on volatility
-        spread_adjustment = volatility * 0.5  # scale as needed
+        spread_adjustment = volatility * 0.5 + imbalance_factor# scale as needed
         
 
+        ## Dynamic adjustment of order size, NOT ACTIVE (useless, does not appear in quantity for buying/seling loop)
+
+        # Base order size (smaller fraction of the limit to prevent over-committing)
+        base_size = max(1, self.limit // 10)  
+
+        # Liquidity factor: Scale order size based on order book depth
+        liquidity_factor = min(total_buy_volume, total_sell_volume) / 100  
+
+        # Position risk factor: Reduce order size when position is close to the limit
+        position_factor = max(0.5, 1 - abs(position) / self.limit) 
+
+        # Compute dynamic order size
+        order_size = int(base_size * liquidity_factor * position_factor)
+
+        # Ensure order size does not exceed remaining buy/sell capacity
+        order_size = min(order_size, to_buy)  # For buying
+        order_size = min(order_size, to_sell)  # For selling
+
+
+
+
         #buy less likely if position to long
+        # If volatility (fluctuation) is high buy less likely
         max_buy_price = default_price - 1 - spread_adjustment if position > self.limit * 0.5 else default_price - spread_adjustment
 
         #sell less likely if position is to short
+        #buy less likely if position to long
+        # If volatility (fluctuation) is high sell less likely
         min_sell_price = default_price + 1 + spread_adjustment if position < self.limit * -0.5 else default_price + spread_adjustment
         #buy as much as possible below the max_buy_price starting with cheaper offers first
         for price, volume in sell_orders:
@@ -238,7 +283,7 @@ class MarketMakingStrategy(Strategy):
         if to_buy > 0 and soft_liquidate:
             #buy half of whats possible for the default price of that product - some value
             #this makes buying less likely
-            quantity = to_buy //2
+            quantity = to_buy // 2
             self.buy(default_price - 2, quantity)
             to_buy -= quantity
 
@@ -257,7 +302,7 @@ class MarketMakingStrategy(Strategy):
         for price, volume in buy_orders:
             if price >= min_sell_price and to_sell > 0:
                 #sell as much as possible, either restriced by limit or by order volume
-                quantity = min(volume, to_buy)
+                quantity = min(volume, to_sell)
                 self.sell(price, quantity)
                 to_sell -= quantity
 
@@ -313,9 +358,11 @@ class KelpStrategy(MarketMakingStrategy):
 
         most_popular_sell_price = min(sell_orders, key = lambda item : item[1])[0]
         most_popular_buy_price = max(buy_orders, key = lambda item : item[1])[0]
+        current_mid_price = (most_popular_buy_price + most_popular_sell_price)//2
+
         
         #calculate average of those prices
-        return (most_popular_buy_price + most_popular_sell_price)//2
+        return current_mid_price
 
 
 class Trader:
