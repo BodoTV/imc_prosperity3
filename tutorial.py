@@ -238,7 +238,7 @@ class MarketMakingStrategy(Strategy):
         for price, volume in buy_orders:
             if price >= min_sell_price and to_sell > 0:
                 #sell as much as possible, either restriced by limit or by order volume
-                quantity = min(volume, to_buy)
+                quantity = min(volume, to_sell)
                 self.sell(price, quantity)
                 to_sell -= quantity
 
