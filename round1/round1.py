@@ -311,11 +311,14 @@ class RainForestResinStrategy(MarketMakingStrategy):
     def get_default_price(self, state: TradingState) -> int:
         return 10_000
 
+class SquidInkStrategy(MarketMakingStrategy):
+    def get_default_price(self, state):
+        return self.get_popular_average(state)
 
 class KelpStrategy(MarketMakingStrategy):
     #for kelp try a marketmaking strategy with a dynamic default price
     def get_default_price(self, state: TradingState) -> int:
-        return self.get_popular_average(state)
+        return self.get_EMA(state)
 
 class Trader:
     def __init__(self, strategy_args = None) -> None:
@@ -331,7 +334,7 @@ class Trader:
         self.strategies = { symbol : strategyClass(symbol, limits[symbol], self.strategy_args.get(symbol, {})) for symbol, strategyClass in {
             "RAINFOREST_RESIN" : RainForestResinStrategy,
             "KELP" : KelpStrategy,
-            "SQUID_INK": KelpStrategy
+            "SQUID_INK": SquidInkStrategy
         }.items()}
 
     def run(self, state: TradingState) -> tuple[dict[Symbol, list[Order]], int, str]:
