@@ -4,6 +4,7 @@ from abc import abstractmethod
 from datamodel import Listing, Observation, Order, OrderDepth, ProsperityEncoder, Symbol, Trade, TradingState
 from collections import deque
 from typing import Any, TypeAlias
+import numpy as np
 
 #this sets JSON as the type alias for everything that can be a json
 JSON: TypeAlias = dict[str, "JSON"] | list["JSON"] | str | int | float | bool | None
@@ -138,10 +139,10 @@ class Strategy:
         return self.orders
 
     def buy(self, price: int, quantity: int) -> None:
-        self.orders.append(Order(self.product, price, quantity))
+        self.orders.append(Order(self.product, int(price), quantity))
 
     def sell(self, price: int, quantity: int) -> None:
-        self.orders.append(Order(self.product, price, -quantity))
+        self.orders.append(Order(self.product, int(price), -quantity))
 
     #this is for transferring data from one trader to the next
     def save(self) -> JSON:
@@ -157,10 +158,13 @@ class MarketMakingStrategy(Strategy):
         super().__init__(product, limit)
 
         self.history = deque()
-        self.midprice_history = deque()
+        self.mid_price_history = deque()
 
+        self.EMA_alpha = strategy_args.get("EMA_alpha", 0.32)
         self.history_size = strategy_args.get("history_size", 10)
         self.soft_liquidate_thresh = strategy_args.get("soft_liquidation_tresh", 0.5)
+
+        self.EMA = None
 
     def act(self, state: TradingState) -> None:
         ##Logic
@@ -189,9 +193,6 @@ class MarketMakingStrategy(Strategy):
         soft_liquidate = len(self.history) == self.history_size and sum(self.history) >= self.history_size * self.soft_liquidate_thresh and self.history[-1]
         #hard: if all of the history is true
         hard_liquidate = len(self.history) == self.history_size and all(self.history)
-
-        #calculate spread depending on volatility of the 
-
 
         #now we want to define if we want to buy or sell more depending on how full our position is
         #we can regulate the prob. of buying and selling by increasing/decreasing the max_buy_price/min_sell_price
@@ -280,9 +281,6 @@ class MarketMakingStrategy(Strategy):
     def load(self, data : JSON) -> None:
         self.history = deque(data)
 
-    def get_history_popular_average(self, state: TradingState) -> int:
-        pass
-    
     def get_popular_average(self, state : TradingState) -> int:
         #calculate the average between the most popular buy and sell price
         order_depths = state.order_depths[self.product]
@@ -295,6 +293,19 @@ class MarketMakingStrategy(Strategy):
         #calculate average of those prices
         return (most_popular_buy_price + most_popular_sell_price)//2
 
+    #returns and updates the current EMA
+    def get_EMA(self, state : TradingState) -> float:
+
+        average_price = self.get_popular_average(state)
+
+        alpha = self.EMA_alpha
+
+        if self.EMA == None:
+            self.EMA = average_price
+        else:
+            self.EMA = average_price * alpha + (1 - alpha) * self.EMA
+
+        return self.EMA
 
 class RainForestResinStrategy(MarketMakingStrategy):
     def get_default_price(self, state: TradingState) -> int:
