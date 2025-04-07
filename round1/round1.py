@@ -150,6 +150,19 @@ class Strategy:
     def load(self, data: JSON) -> None:
         pass
 
+    def get_popular_average(self, state : TradingState) -> int:
+        #calculate the average between the most popular buy and sell price
+        order_depths = state.order_depths[self.product]
+        sell_orders = order_depths.sell_orders.items()
+        buy_orders = order_depths.buy_orders.items()
+
+        most_popular_sell_price = min(sell_orders, key = lambda item : item[1])[0]
+        most_popular_buy_price = max(buy_orders, key = lambda item : item[1])[0]
+        
+        #calculate average of those prices
+        return (most_popular_buy_price + most_popular_sell_price)//2
+
+
 class MarketMakingStrategy(Strategy):
     def __init__(self, 
                  product: str, limit: int, 
@@ -287,17 +300,7 @@ class RainForestResinStrategy(MarketMakingStrategy):
 class KelpStrategy(MarketMakingStrategy):
     #for kelp try a marketmaking strategy with a dynamic default price
     def get_default_price(self, state: TradingState) -> int:
-        #calculate the average between the most popular buy and sell price
-        order_depths = state.order_depths[self.product]
-        sell_orders = order_depths.sell_orders.items()
-        buy_orders = order_depths.buy_orders.items()
-
-        most_popular_sell_price = min(sell_orders, key = lambda item : item[1])[0]
-        most_popular_buy_price = max(buy_orders, key = lambda item : item[1])[0]
-        
-        #calculate average of those prices
-        return (most_popular_buy_price + most_popular_sell_price)//2
-
+        return self.get_popular_average(state)
 
 class Trader:
     def __init__(self, strategy_args = None) -> None:
