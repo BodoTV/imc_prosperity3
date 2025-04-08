@@ -45,7 +45,9 @@ class TradingDataAnalyzer:
                                   sampling_steps=None, 
                                   show_trades=True, 
                                   quantity_threshold=None,
-                                  separate_subplots=False):
+                                  separate_subplots=False,
+                                  match_cross_product_trades=False,
+                                  show_only_cross_product_trade_quotes=False):
         """
         Plot bid/ask/mid price levels for a given product from order book data.
         
@@ -56,6 +58,35 @@ class TradingDataAnalyzer:
 
         if isinstance(product_names, str):
             product_names = [product_names]
+            
+        matched_trade_indices = {}
+        matched_timestamps = set()
+
+        if show_trades and quantity_threshold is not None and match_cross_product_trades:
+            # Collect all trades above threshold per product
+            qualified_trades = {}
+            for product_name in product_names:
+                df = self.trade_products.get(product_name)
+                if df is not None:
+                    qualified_trades[product_name] = df[df['quantity'] > quantity_threshold][['timestamp', 'quantity']]
+                else:
+                    qualified_trades[product_name] = pd.DataFrame(columns=['timestamp', 'quantity'])
+
+            # Find common (timestamp, quantity) pairs across all products
+            sets_of_pairs = [set(map(tuple, df.values)) for df in qualified_trades.values()]
+            common_pairs = set.intersection(*sets_of_pairs)
+            # Extract just the timestamps that matched
+            matched_timestamps = set(ts for ts, _ in common_pairs)
+
+
+            # Store filtered dataframes for reuse
+            for product_name in product_names:
+                df = self.trade_products.get(product_name)
+                if df is not None:
+                    matched_trade_indices[product_name] = df[
+                        df[['timestamp', 'quantity']].apply(tuple, axis=1).isin(common_pairs)
+                    ]
+
 
         if sampling_steps is None:
             sampling_steps = [1] * 7
@@ -74,6 +105,13 @@ class TradingDataAnalyzer:
                 continue
 
             df = self.products[product_name]
+
+            if show_only_cross_product_trade_quotes and match_cross_product_trades:
+                df = df[df['timestamp'].isin(matched_timestamps)]
+                if df.empty:
+                    print(f"No matching quote data for product: {product_name} after filtering timestamps.")
+                    continue
+
             if df.empty:
                 print(f"No order book data found for product: {product_name}")
                 continue
@@ -110,23 +148,25 @@ class TradingDataAnalyzer:
 
             # Plot trades (optional)
             if show_trades:
-                trade_df = self.trade_products.get(product_name)
-                if trade_df is not None and not trade_df.empty:
-
-                    if quantity_threshold is not None:
+                if match_cross_product_trades:
+                    trade_df = matched_trade_indices.get(product_name)
+                else:
+                    trade_df = self.trade_products.get(product_name)
+                    if trade_df is not None and not trade_df.empty and quantity_threshold is not None:
                         trade_df = trade_df[trade_df['quantity'] > quantity_threshold]
 
-                    if not trade_df.empty and quantity_threshold is not None:
-                        ax.scatter(
-                            trade_df['timestamp'],
-                            trade_df['price'],
-                            color='blue',
-                            alpha=0.6,
-                            marker='o',
-                            s=40,
-                            edgecolor='k',
-                            label=f'{product_name} - Trades (qty > {quantity_threshold})' if quantity_threshold else f'{product_name} - Trades'
-                        )
+
+                if not trade_df.empty and quantity_threshold is not None:
+                    ax.scatter(
+                        trade_df['timestamp'],
+                        trade_df['price'],
+                        color='blue',
+                        alpha=0.6,
+                        marker='o',
+                        s=40,
+                        edgecolor='k',
+                        label=f'{product_name} - Trades (qty > {quantity_threshold})' if quantity_threshold else f'{product_name} - Trades'
+                    )
                     
 
             if not df.empty:
@@ -142,13 +182,18 @@ class TradingDataAnalyzer:
         plt.xlabel('Timestamp',  fontsize=12)
         plt.title(f'Bid/Ask/Mid Prices for {product_name}')
         plt.tight_layout()
-        plt.show()
+
 
 
 
 # Set file paths for order book and trade data
-prices_round_1_day_0 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/prices_round_1_day_-2.csv'  
-trades_round_1_day_0 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/trades_round_1_day_-2.csv'  
+prices_round_1_day_0 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/prices_round_1_day_0.csv'  
+trades_round_1_day_0 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/trades_round_1_day_0.csv'  
+prices_round_1_day_1 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/prices_round_1_day_-1.csv'  
+trades_round_1_day_1 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/trades_round_1_day_-1.csv'  
+prices_round_1_day_2 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/prices_round_1_day_-2.csv'  
+trades_round_1_day_2 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/trades_round_1_day_-2.csv'  
+
 
 # Create instance of the analyzer
 analyzer = TradingDataAnalyzer(prices_round_1_day_0, trades_round_1_day_0)
@@ -161,15 +206,22 @@ sampling_option2 = [10, 10, 10, 10, 10, 10, 10]
 ## 'bids'/'asks' in plot_product_price_levels defines which price levels to plot choosing from bid_price_1, ask_price_1, bid_price_2 etc.
 
 analyzer.plot_product_price_levels(['SQUID_INK', 'KELP'], 
-                                   bids=[1], 
-                                   asks=[1], 
-                                   sampling_steps=sampling_option2,
+                                   bids=[1,2,3], 
+                                   asks=[1,2,3], 
+                                   sampling_steps=sampling_option1,
                                    show_trades=True,
-                                   quantity_threshold=14,
-                                   separate_subplots=True)
+                                   quantity_threshold=12,
+                                   separate_subplots=True,
+                                   match_cross_product_trades=True,
+                                   show_only_cross_product_trade_quotes=True)
 
 
 # Access order book and trade data directly
 kelp_trades_df = analyzer.kelp_trades
 kelp_orders_df = analyzer.kelp
 
+#print(analyzer.full_trades)
+
+print(kelp_trades_df[kelp_trades_df['quantity'] > 12].head(50))
+
+plt.show()
