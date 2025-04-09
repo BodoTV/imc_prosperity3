@@ -183,20 +183,48 @@ class TradingDataAnalyzer:
         plt.title(f'Bid/Ask/Mid Prices for {product_name}')
         plt.tight_layout()
 
+    def plot_price_vs_volume(self, product_names: list, instances: list):
 
+        instance_columns = {'Ask1': ['ask_price_1', 'ask_volume_1'], 'Ask2': ['ask_price_2', 'ask_volume_2'], 'Ask3': ['ask_price_3', 'ask_volume_3'], 'Bid1': ['bid_price_1', 'bid_volume_1'], 'Bid2': ['bid_price_2', 'bid_volume_2'], 'Bid3': ['bid_price_3', 'bid_volume_3']}
+        
+        for product in product_names:
+            data = self.products[product]
+            for instance in instances:
+                heatmap_data = data.groupby([instance_columns[instance][1], instance_columns[instance][0]]).size().unstack(fill_value=0)
+
+                np_heatmap = heatmap_data.values
+
+                # Plot the heatmap
+                plt.figure()
+                im = plt.imshow(np_heatmap, aspect='auto', origin='lower', cmap='viridis')
+
+                # Add colorbar
+                cbar = plt.colorbar(im)
+                cbar.set_label('Frequency')
+
+                # Set axis ticks and labels
+                plt.xticks(ticks=np.arange(len(heatmap_data.columns))[::3], labels=heatmap_data.columns[::3], rotation=90)
+                plt.yticks(ticks=np.arange(len(heatmap_data.index))[::2], labels=heatmap_data.index[::2])
+
+                plt.xlabel('Price')
+                plt.ylabel('Volume')
+                plt.title(product + " :"+ instance + ' Frequency Heatmap (Price vs Volume)')
+
+                plt.tight_layout()
+                plt.show()
 
 
 # Set file paths for order book and trade data
-prices_round_1_day_0 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/prices_round_1_day_0.csv'  
-trades_round_1_day_0 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/trades_round_1_day_0.csv'  
-prices_round_1_day_1 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/prices_round_1_day_-1.csv'  
-trades_round_1_day_1 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/trades_round_1_day_-1.csv'  
-prices_round_1_day_2 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/prices_round_1_day_-2.csv'  
-trades_round_1_day_2 = '/Users/moritzrautenberg/Desktop/prosperity3/round-1-island-data-bottle/trades_round_1_day_-2.csv'  
+prices_round_1_day_0 = 'round1/round-1-island-data-bottle/prices_round_1_day_0.csv'  
+trades_round_1_day_0 = 'round1/round-1-island-data-bottle/trades_round_1_day_0.csv'  
+prices_round_1_day_1 = 'round1/round-1-island-data-bottle/prices_round_1_day_-1.csv'  
+trades_round_1_day_1 = 'round1/round-1-island-data-bottle/trades_round_1_day_-1.csv'  
+prices_round_1_day_2 = 'round1/round-1-island-data-bottle/prices_round_1_day_-2.csv'  
+trades_round_1_day_2 = 'round1/round-1-island-data-bottle/trades_round_1_day_-2.csv'  
 
 
 # Create instance of the analyzer
-analyzer = TradingDataAnalyzer(prices_round_1_day_0, trades_round_1_day_0)
+analyzer = TradingDataAnalyzer(prices_round_1_day_1, trades_round_1_day_1)
 
 # Plot order book price levels
 ## 'sampling_steps' in plot_product_price_levels defines how many data points to skip between adjacently plotted points
@@ -210,12 +238,12 @@ analyzer.plot_product_price_levels(['SQUID_INK', 'KELP'],
                                    asks=[1,2,3], 
                                    sampling_steps=sampling_option1,
                                    show_trades=True,
-                                   quantity_threshold=12,
+                                   quantity_threshold=5,
                                    separate_subplots=True,
                                    match_cross_product_trades=True,
                                    show_only_cross_product_trade_quotes=True)
 
-
+analyzer.plot_price_vs_volume(['SQUID_INK', 'KELP'], ['Bid1','Bid2'])
 # Access order book and trade data directly
 kelp_trades_df = analyzer.kelp_trades
 kelp_orders_df = analyzer.kelp
