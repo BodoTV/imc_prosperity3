@@ -164,6 +164,11 @@ class MarketMakingStrategy(Strategy):
         self.history_size = strategy_args.get("history_size", 10)
         self.soft_liquidate_thresh = strategy_args.get("soft_liquidation_tresh", 0.5)
         self.volatility_multiplier = strategy_args.get("volatility_multiplier", 1.0)
+
+        self.beta_reversion = strategy_args.get("beta_reversion", 0.369)
+        self.volume_threshold = strategy_args.get("volume_threshold", 12) #for indentifying the market maker
+        self.last_mm_mid_price = None #in this parameter we store the last mid_price if no new midprice can be calculated
+
         self.EMA = None
 
     def get_popular_average(self, state : TradingState) -> int:
@@ -327,13 +332,99 @@ class RainForestResinStrategy(MarketMakingStrategy):
         return 10_000
 
 class SquidInkStrategy(MarketMakingStrategy):
-    def get_default_price(self, state):
-        return self.get_popular_average(state)
+    def get_default_price(self, state) -> float:
+        
+        #return self.get_popular_average(state)
+
+        order_depth = state.order_depths[self.product]
+
+        #this gets the cheapest price we can buy at, and the highest price we can sell at
+        best_ask = min(order_depth.sell_orders.keys())
+        best_bid = max(order_depth.buy_orders.keys())
+        #creates a list of the prices of orders with high volumes --> market maker prices
+        filtered_ask =  [price for price in order_depth.sell_orders.keys()
+                         if abs(order_depth.sell_orders[price])
+                         >= self.volume_threshold]
+
+        filtered_bid = [price for price in order_depth.buy_orders.keys()
+                         if abs(order_depth.buy_orders[price])
+                         >= self.volume_threshold]
+
+        #defines the ask and bid of the market maker as the best ask and bid of those prices        
+        mm_ask = min(filtered_ask) if len(filtered_ask) > 0 else None
+        mm_bid = max(filtered_bid) if len(filtered_bid) > 0 else None
+
+        #if there is no market maker
+        if mm_ask == None or mm_bid == None:
+            if self.last_mm_mid_price == None:
+                mm_mid_price = (best_ask + best_bid)/2
+            else:
+                mm_mid_price = self.last_mm_mid_price
+
+        else:
+            mm_mid_price = (mm_ask + mm_bid)/2
+
+        #mean reversion
+        if self.last_mm_mid_price != None:
+            last_price = self.last_mm_mid_price
+            last_returns = (mm_mid_price - last_price) / last_price
+            pred_returns = ( 
+                last_returns * -0.369 #this tries to predict how much 
+            )
+            fair = mm_mid_price + (mm_mid_price * pred_returns)
+        else:
+            fair = mm_mid_price
+
+        self.last_mm_mid_price = mm_mid_price
+
+        return fair
 
 class KelpStrategy(MarketMakingStrategy):
     #for kelp try a marketmaking strategy with a dynamic default price
     def get_default_price(self, state: TradingState) -> int:
-        return self.get_EMA(state)
+        order_depth = state.order_depths[self.product]
+
+        #this gets the cheapest price we can buy at, and the highest price we can sell at
+        best_ask = min(order_depth.sell_orders.keys())
+        best_bid = max(order_depth.buy_orders.keys())
+        #creates a list of the prices of orders with high volumes --> market maker prices
+        filtered_ask =  [price for price in order_depth.sell_orders.keys()
+                         if abs(order_depth.sell_orders[price])
+                         >= self.volume_threshold]
+
+        filtered_bid = [price for price in order_depth.buy_orders.keys()
+                         if abs(order_depth.buy_orders[price])
+                         >= self.volume_threshold]
+
+        #defines the ask and bid of the market maker as the best ask and bid of those prices        
+        mm_ask = min(filtered_ask) if len(filtered_ask) > 0 else None
+        mm_bid = max(filtered_bid) if len(filtered_bid) > 0 else None
+
+        #if there is no market maker
+        if mm_ask == None or mm_bid == None:
+            if self.last_mm_mid_price == None:
+                mm_mid_price = (best_ask + best_bid)/2
+            else:
+                mm_mid_price = self.last_mm_mid_price
+
+        else:
+            mm_mid_price = (mm_ask + mm_bid)/2
+
+        #mean reversion
+        if self.last_mm_mid_price != None:
+            last_price = self.last_mm_mid_price
+            last_returns = (mm_mid_price - last_price) / last_price
+            pred_returns = ( 
+                last_returns * -0.5 #this tries to predict how much 
+            )
+            fair = mm_mid_price + (mm_mid_price * pred_returns)
+        else:
+            fair = mm_mid_price
+
+        self.last_mm_mid_price = mm_mid_price
+
+        return fair
+
 
 class Trader:
     def __init__(self, strategy_args = None) -> None:
