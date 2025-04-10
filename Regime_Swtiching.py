@@ -247,9 +247,75 @@ class LinearRegressionForecastingStrategy(Strategy):
         elif forecasted_price < current_price and to_sell > 0:
             self.sell(current_price, to_sell)
 
+class RegimeSwitchingStrategy(Strategy):
+    def __init__(
+        self,
+        product: str,
+        limit: int,
+        lookback: int = 10,
+        vol_lookback: int = 10,
+        low_vol_threshold: float = 1.0,
+        high_vol_threshold: float = 3.0,
+        mean_type: str = "SMA",
+        std_threshold: float = 1.0,
+    ):
+        super().__init__(product, limit)
+        self.product = product
+        self.limit = limit
+        self.lookback = lookback
+        self.vol_lookback = vol_lookback
+        self.low_vol_threshold = low_vol_threshold
+        self.high_vol_threshold = high_vol_threshold
+        self.mean_type = mean_type
+        self.std_threshold = std_threshold
+
+        # Instantiate underlying strategies
+        self.market_making = MarketMakingStrategy(product, limit)
+        self.market_making.get_default_price = self.get_default_price
+        self.mean_reversion = MeanReversionStrategy(
+            product, limit, lookback=lookback,
+            std_threshold=std_threshold,
+            mean_type=mean_type
+        )
+        self.trend_following = TrendFollowingStrategy(
+            product, limit, lookback=lookback,
+            mean_type=mean_type
+        )
+
+        self.orders = []
+
+    def act(self, state: TradingState) -> None:
+        prices = HelperFunctions.get_price_history(state, self.product)
+
+        if len(prices) < self.vol_lookback:
+            # Not enough data — use market making as fallback
+            self.market_making.act(state)
+            self.orders.extend(self.market_making.run(state))
+            return
+
+        # Calculate volatility
+        volatility = HelperFunctions.get_moving_standard_deviation(prices, self.vol_lookback)
+
+        # Select strategy based on volatility
+        if volatility is None:
+            self.market_making.act(state)
+        elif volatility < self.low_vol_threshold:
+            self.mean_reversion.act(state)
+        elif volatility > self.high_vol_threshold:
+            self.trend_following.act(state)
+        else:
+            self.market_making.act(state)
+
+    def save(self) -> JSON:
+        return {
+            "market_making": self.market_making.save(),
+        }
+
+    def load(self, data: JSON) -> None:
+        self.market_making.load(data.get("market_making", []))
 
 
-class TrendFollowingStrategy(Strategy):
+class TrendFollowingStrategy(RegimeSwitchingStrategy):
     def __init__(self, product: str, limit: int, lookback: int = 10, mean_type: str = "SMA"):
         super().__init__(product, limit)
         self.lookback = lookback
@@ -281,7 +347,7 @@ class TrendFollowingStrategy(Strategy):
 
     
 
-class MeanReversionStrategy(Strategy):
+class MeanReversionStrategy(RegimeSwitchingStrategy):
     def __init__(self, product: str, limit: int, lookback: int = 10, std_threshold: float = 1.0, mean_type: str = "SMA"):
         super().__init__(product, limit)
         self.lookback = lookback
@@ -310,7 +376,7 @@ class MeanReversionStrategy(Strategy):
             self.buy(current_price, to_buy)
 
 
-class MarketMakingStrategy(Strategy):
+class MarketMakingStrategy(RegimeSwitchingStrategy):
     def __init__(self, product: str, limit: int):
         super().__init__(product, limit)
         self.history = deque()
@@ -412,71 +478,9 @@ class MarketMakingStrategy(Strategy):
     def load(self, data: JSON) -> None:
         self.history = deque(data)
 
-class RegimeSwitchingStrategy(Strategy):
-    def __init__(
-        self,
-        product: str,
-        limit: int,
-        lookback: int = 10,
-        vol_lookback: int = 10,
-        low_vol_threshold: float = 1.0,
-        high_vol_threshold: float = 3.0,
-        mean_type: str = "SMA",
-        std_threshold: float = 1.0,
-    ):
-        super().__init__(product, limit)
-        self.product = product
-        self.limit = limit
-        self.lookback = lookback
-        self.vol_lookback = vol_lookback
-        self.low_vol_threshold = low_vol_threshold
-        self.high_vol_threshold = high_vol_threshold
-        self.mean_type = mean_type
-        self.std_threshold = std_threshold
-
-        # Instantiate underlying strategies
-        self.market_making = MarketMakingStrategy(product, limit)
-        self.mean_reversion = MeanReversionStrategy(
-            product, limit, lookback=lookback,
-            std_threshold=std_threshold,
-            mean_type=mean_type
-        )
-        self.trend_following = TrendFollowingStrategy(
-            product, limit, lookback=lookback,
-            mean_type=mean_type
-        )
-
-    def act(self, state: TradingState) -> None:
-        prices = HelperFunctions.get_price_history(state, self.product)
-
-        if len(prices) < self.vol_lookback:
-            # Not enough data — use market making as fallback
-            self.market_making.act(state)
-            return
-
-        # Calculate volatility
-        volatility = HelperFunctions.get_moving_standard_deviation(prices, self.vol_lookback)
-
-        # Select strategy based on volatility
-        if volatility is None:
-            self.market_making.act(state)
-        elif volatility < self.low_vol_threshold:
-            self.mean_reversion.act(state)
-        elif volatility > self.high_vol_threshold:
-            self.trend_following.act(state)
-        else:
-            self.market_making.act(state)
-
-    def save(self) -> JSON:
-        return {
-            "market_making": self.market_making.save(),
-        }
-
-    def load(self, data: JSON) -> None:
-        self.market_making.load(data.get("market_making", []))
 
 
-class RainForestResinStrategy(RegimeSwitchingStrategy):
+class RainForestResinStrategy(MarketMakingStrategy):
     def get_default_price(self, state: TradingState) -> int:
         # return 10_000
         # Get price history using the helper class
@@ -492,7 +496,7 @@ class RainForestResinStrategy(RegimeSwitchingStrategy):
         return int(moving_avg) if moving_avg is not None else 10_000
 
 
-class KelpStrategy(RegimeSwitchingStrategy):
+class KelpStrategy(MarketMakingStrategy):
     #for kelp try a marketmaking strategy with a dynamic default price
     def get_default_price(self, state: TradingState) -> int:
         #calculate the average between the most popular buy and sell price
