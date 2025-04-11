@@ -3,7 +3,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 class TradingDataAnalyzer:
-    def __init__(self, orderbook_file_path: str, trades_file_path: str):
+    def __init__(self, orderbook_file_path: str, trades_file_path: str, day:str):
+        
+        self.day = day
         """
         Initialize trading data: order book and trade history split per product.
         """
@@ -204,7 +206,7 @@ class TradingDataAnalyzer:
                 ax.set_ylabel('Price', fontsize=12)
 
         plt.xlabel('Timestamp',  fontsize=12)
-        plt.title(f'Bid/Ask/Mid Prices for {product_name}')
+        plt.title(f'{self.day}: Bid/Ask/Mid Prices for {product_name}')
         plt.tight_layout()
         plt.show()
 
@@ -233,7 +235,7 @@ class TradingDataAnalyzer:
 
                 plt.xlabel('Price')
                 plt.ylabel('Volume')
-                plt.title(product + " :"+ instance + ' Frequency Heatmap (Price vs Volume)')
+                plt.title(f"{self.day}: {product} {instance} Frequency Heatmap (Price vs Volume)")
 
                 plt.tight_layout()
                 plt.show()
@@ -269,7 +271,7 @@ class TradingDataAnalyzer:
         ax.axhline(mean_diff, label='mean_diff', color= 'r', linestyle='dashed')
         ax.legend()
 
-        plt.title(f'{basket}: diff = mid_price - ingridients')
+        plt.title(f'{self.day}: {basket}: diff = mid_price - ingridients')
         
         
 
@@ -283,7 +285,9 @@ trades_round_2_day_2 = 'round2/round-2-island-data-bottle/trades_round_2_day_1.c
 
 
 # Create instance of the analyzer
-analyzer = TradingDataAnalyzer(prices_round_2_day_2, trades_round_2_day_2)
+analysis_day0 = TradingDataAnalyzer(prices_round_2_day_0, trades_round_2_day_0, "Day 0")
+analysis_day1 = TradingDataAnalyzer(prices_round_2_day_1, trades_round_2_day_1, "Day 1")
+analysis_day2 = TradingDataAnalyzer(prices_round_2_day_2, trades_round_2_day_2, "Day 2")
 
 # Plot order book price levels
 ## 'sampling_steps' in plot_product_price_levels defines how many data points to skip between adjacently plotted points
@@ -293,7 +297,7 @@ sampling_option2 = [10, 10, 10, 10, 10, 10, 10]
 ## 'bids'/'asks' in plot_product_price_levels defines which price levels to plot choosing from bid_price_1, ask_price_1, bid_price_2 etc.
 
 """
-analyzer.plot_product_price_levels(['JAMS', 'CROISSANTS', "DJEMBES", "PICNIC_BASKET1"], 
+analysis_day0.plot_product_price_levels(['JAMS', 'CROISSANTS', "DJEMBES", "PICNIC_BASKET1"], 
                                    bids=[1,2,3], 
                                    asks=[1,2,3], 
                                    sampling_steps=sampling_option1,
@@ -306,15 +310,19 @@ analyzer.plot_product_price_levels(['JAMS', 'CROISSANTS', "DJEMBES", "PICNIC_BAS
 
 #analyzer.plot_price_vs_volume(['JAMS', 'CROISSANTS'], ['Bid1','Bid2'])
 
-analyzer.plot_picnicbasket('PICNIC_BASKET1')
-analyzer.plot_picnicbasket('PICNIC_BASKET2')
+analysis_day0.plot_picnicbasket('PICNIC_BASKET1')
+analysis_day0.plot_picnicbasket('PICNIC_BASKET2')
+analysis_day1.plot_picnicbasket('PICNIC_BASKET1')
+analysis_day1.plot_picnicbasket('PICNIC_BASKET2')
+analysis_day2.plot_picnicbasket('PICNIC_BASKET1')
+analysis_day2.plot_picnicbasket('PICNIC_BASKET2')
 
 # Access order book and trade data directly
-kelp_trades_df = analyzer.kelp_trades
-kelp_orders_df = analyzer.kelp
+kelp_trades_df = analysis_day0.kelp_trades
+kelp_orders_df = analysis_day0.kelp
 
-#print(analyzer.full_trades)
+#print(analysis_day0.full_trades)
 
-print(kelp_trades_df[kelp_trades_df['quantity'] > 12].head(50))
+#print(kelp_trades_df[kelp_trades_df['quantity'] > 12].head(50))
 
 plt.show()
