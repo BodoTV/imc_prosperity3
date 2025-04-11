@@ -532,11 +532,11 @@ class Trader:
         limits = {
             "RAINFOREST_RESIN": 50,
             "KELP" : 50,
-            "SQUID_INK" : 50
-            "CROISSANT": 250
-            "JAM": 350
-            "DJEMBE": 60
-            "PICNIC_BASKET1": 60
+            "SQUID_INK" : 50,
+            "CROISSANT": 250,
+            "JAM": 350,
+            "DJEMBE": 60,
+            "PICNIC_BASKET1": 6,
             "PICNIC_BASKET2": 100
         }
 
