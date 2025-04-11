@@ -433,6 +433,11 @@ class Trader:
             "RAINFOREST_RESIN": 50,
             "KELP" : 50,
             "SQUID_INK" : 50
+            "CROISSANT": 250
+            "JAM": 350
+            "DJEMBE": 60
+            "PICNIC_BASKET1": 60
+            "PICNIC_BASKET2": 100
         }
 
         self.strategy_args = strategy_args if strategy_args != None else {}
