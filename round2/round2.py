@@ -327,7 +327,7 @@ class MarketMakingStrategy(Strategy):
         self.history = deque(data)
 
 class GiftBasketStrategy(Strategy):
-     def __init__(self, 
+    def __init__(self, 
                  product: str, limit: int, 
                  strategy_args):
         super().__init__(product, limit)
