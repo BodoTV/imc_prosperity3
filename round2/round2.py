@@ -543,6 +543,9 @@ class KelpStrategy(MarketMakingStrategy):
 
         return fair
 
+class JamsStrategy(MarketMakingStrategy):
+    def get_default_price(self, state):
+        return self.get_EMA(state)
 
 class Trader:
     def __init__(self, strategy_args = None) -> None:
@@ -564,6 +567,7 @@ class Trader:
             "RAINFOREST_RESIN" : RainForestResinStrategy,
             "KELP" : KelpStrategy,
             "SQUID_INK": SquidInkStrategy,
+            "JAMS": JamsStrategy,
             "PICNIC_BASKET1": PicnicBasket1Strategy,
             "PICNIC_BASKET2": PicnicBasket2Strategy
         }.items()}
