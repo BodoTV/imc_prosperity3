@@ -350,7 +350,7 @@ class GiftBasketStrategy(Strategy):
 
         self.diff1_price_history.append(diff1)
 
-        if len(diff1) < 5
+        if len(diff1) < 5:
             current_diff = diff1
         else:
             current_diff = np.mean(self.diff1_price_history)
@@ -368,18 +368,17 @@ class GiftBasketStrategy(Strategy):
         #    self.go_short(state)
 
 
-        long_threshold, short_threshold = {
-            "CHOCOLATE": (230, 355),
-            "STRAWBERRIES": (195, 485),
-            "ROSES": (325, 370),
-            "GIFT_BASKET": (290, 355),
-        }[self.product]
+        #long_threshold, short_threshold = {
+        #    "CHOCOLATE": (230, 355),
+        #    "STRAWBERRIES": (195, 485),
+        #    "ROSES": (325, 370),
+        #    "GIFT_BASKET": (290, 355),
+        #}[self.product]
 
-        if diff < long_threshold:
-            self.go_long(state)
-        elif diff > short_threshold:
-            self.go_short(state)
-
+        #if diff < long_threshold:
+        #    self.go_long(state)
+        #elif diff > short_threshold:
+        #    self.go_short(state)
 
         # premium, threshold = {
         #     "CHOCOLATE": (285, 0.19),
