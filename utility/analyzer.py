@@ -17,19 +17,23 @@ class TradingDataAnalyzer:
         self.squid_ink = self.full_orderbook[self.full_orderbook['product'] == 'SQUID_INK'].copy()
         self.jams = self.full_orderbook[self.full_orderbook['product'] == 'JAMS'].copy()
         self.croissants = self.full_orderbook[self.full_orderbook['product'] == 'CROISSANTS'].copy()
-        self.djembe = self.full_orderbook[self.full_orderbook['product'] == 'DJEMBE'].copy()
+        self.djembes = self.full_orderbook[self.full_orderbook['product'] == 'DJEMBES'].copy()
         self.picnic_basket1 = self.full_orderbook[self.full_orderbook['product'] == 'PICNIC_BASKET1'].copy()
+        self.picnic_basket2 = self.full_orderbook[self.full_orderbook['product'] == 'PICNIC_BASKET2'].copy()
         self.products = {
             'KELP': self.kelp,
             'RAINFOREST_RESIN': self.rainforest_resin,
             'SQUID_INK': self.squid_ink,
             'JAMS': self.jams,
             'CROISSANTS': self.croissants,
-            'DJEMBE': self.djembe,
-            'PICNIC_BASKET1': self.picnic_basket1
-
+            'DJEMBES': self.djembes,
+            'PICNIC_BASKET1': self.picnic_basket1,
+            'PICNIC_BASKET2': self.picnic_basket2
         }
 
+        #group together the two basket options
+        self.baskets = {"PICNIC_BASKET1": ["JAMS","CROISSANTS","DJEMBES"], "PICNIC_BASKET2": ["JAMS","CROISSANTS"]}
+        self.n_in_baskets = {"PICNIC_BASKET1": {"JAMS": 3,"CROISSANTS": 6,"DJEMBES": 1}, "PICNIC_BASKET2": {"JAMS": 2,"CROISSANTS": 4}}
         # Load and prepare trade data
         self.full_trades = pd.read_csv(trades_file_path, sep=';', na_values=[''])
 
@@ -41,11 +45,20 @@ class TradingDataAnalyzer:
         self.kelp_trades = trades[trades['symbol'] == 'KELP'].copy()
         self.rainforest_resin_trades = trades[trades['symbol'] == 'RAINFOREST_RESIN'].copy()
         self.squid_ink_trades = trades[trades['symbol'] == 'SQUID_INK'].copy()
-
+        self.jams_trades = trades[trades['symbol'] == 'JAMS'].copy()
+        self.croissants_trades = trades[trades['symbol'] == 'CROISSANTS'].copy()
+        self.djembes_trades = trades[trades['symbol'] == 'DJEMBES'].copy()
+        self.picnic_basket1_trades = trades[trades['symbol'] == 'PICNIC_BASKET1'].copy()
+        self.picnic_basket2_trades = trades[trades['symbol'] == 'PICNIC_BASKET2'].copy()
         self.trade_products = {
             'KELP': self.kelp_trades,
             'RAINFOREST_RESIN': self.rainforest_resin_trades,
-            'SQUID_INK': self.squid_ink_trades
+            'SQUID_INK': self.squid_ink_trades,
+            'JAMS': self.jams_trades,
+            'CROISSANTS': self.croissants_trades,
+            'DJEMBES': self.djembes_trades,
+            'PICNIC_BASKET1': self.picnic_basket1_trades,
+            'PICNIC_BASKET2': self.picnic_basket2_trades
         }
 
     def plot_product_price_levels(self, 
@@ -61,7 +74,7 @@ class TradingDataAnalyzer:
         Plot bid/ask/mid price levels for a given product from order book data.
         
         Args:
-            product_name (str): One of 'KELP', 'RAINFOREST_RESIN', 'SQUID_INK'.
+            product_name (str): One of 'KELP', 'RAINFOREST_RESIN', 'SQUID_INK', ... .
             sampling_steps (list): List of 7 integers for subsampling each of the 7 price lines.
         """
 
@@ -102,12 +115,14 @@ class TradingDataAnalyzer:
         assert len(sampling_steps) == 7, "sampling_steps must be a list of 7 integers."
 
         n = len(product_names)
-        fig, axes = plt.subplots(n if separate_subplots else 1, 1, figsize=(14, 5 * n), sharex=not separate_subplots)
-        if not isinstance(axes, np.ndarray):
-            axes = [axes]
+        #fig, axes = plt.subplots(n if separate_subplots else 1, 1, figsize=(14, 5 * n), sharex=not separate_subplots)
+        #if not isinstance(axes, np.ndarray):
+        #    axes = [axes]
 
+        #plot the price behavior for all products in product_names
         for product_name in product_names:
-            ax = axes[product_names.index(product_name)]
+            #ax = axes[product_names.index(product_name)]
+            fig, ax = plt.subplots()
 
             if product_name not in self.products:
                 print(f"Product '{product_name}' not found.")
@@ -191,6 +206,7 @@ class TradingDataAnalyzer:
         plt.xlabel('Timestamp',  fontsize=12)
         plt.title(f'Bid/Ask/Mid Prices for {product_name}')
         plt.tight_layout()
+        plt.show()
 
     def plot_price_vs_volume(self, product_names: list, instances: list):
 
@@ -222,6 +238,40 @@ class TradingDataAnalyzer:
                 plt.tight_layout()
                 plt.show()
 
+    #method that analyzes picnicbasket vs ingridients behavior
+    def plot_picnicbasket(self, basket: str):
+        products_in_basket = self.baskets[basket]
+        print(f'The {basket} contains {products_in_basket}.')
+
+        basket_data = self.products[basket]
+        time = basket_data['timestamp'].to_numpy()
+        mp_basket = basket_data['mid_price'].to_numpy() 
+
+        #before looping over the products in the basket the diff is just the basket price
+        diff = mp_basket
+        print(diff[0])
+        #loop over all products in the basket and subtract the price*n from the basket price
+        for product in products_in_basket:
+            product_data = self.products[product]
+            mp_product = product_data['mid_price'].to_numpy()
+            n_product = self.n_in_baskets[basket][product]
+
+            diff -= mp_product*n_product
+            print(diff[0])
+
+        mean_diff = np.mean(diff)
+        mean_std = np.std(diff)
+
+        fig, ax = plt.subplots()
+        ax.plot(time, diff)
+        ax.set_xlabel('timestamps')
+        ax.set_ylabel('diff')
+        ax.axhline(mean_diff, label='mean_diff', color= 'r', linestyle='dashed')
+        ax.legend()
+
+        plt.title(f'{basket}: diff = mid_price - ingridients')
+        
+        
 
 # Set file paths for order book and trade data
 prices_round_2_day_0 = 'round2/round-2-island-data-bottle/prices_round_2_day_-1.csv'  
@@ -233,7 +283,7 @@ trades_round_2_day_2 = 'round2/round-2-island-data-bottle/trades_round_2_day_1.c
 
 
 # Create instance of the analyzer
-analyzer = TradingDataAnalyzer(prices_round_2_day_1, trades_round_2_day_1)
+analyzer = TradingDataAnalyzer(prices_round_2_day_2, trades_round_2_day_2)
 
 # Plot order book price levels
 ## 'sampling_steps' in plot_product_price_levels defines how many data points to skip between adjacently plotted points
@@ -242,7 +292,8 @@ sampling_option2 = [10, 10, 10, 10, 10, 10, 10]
 
 ## 'bids'/'asks' in plot_product_price_levels defines which price levels to plot choosing from bid_price_1, ask_price_1, bid_price_2 etc.
 
-analyzer.plot_product_price_levels(['JAMS', 'CROISSANTS', "DJEMBE", "PICNIC_BASKET1"], 
+"""
+analyzer.plot_product_price_levels(['JAMS', 'CROISSANTS', "DJEMBES", "PICNIC_BASKET1"], 
                                    bids=[1,2,3], 
                                    asks=[1,2,3], 
                                    sampling_steps=sampling_option1,
@@ -251,8 +302,12 @@ analyzer.plot_product_price_levels(['JAMS', 'CROISSANTS', "DJEMBE", "PICNIC_BASK
                                    separate_subplots=True,
                                    match_cross_product_trades=True,
                                    show_only_cross_product_trade_quotes=False)
+"""
 
 #analyzer.plot_price_vs_volume(['JAMS', 'CROISSANTS'], ['Bid1','Bid2'])
+
+analyzer.plot_picnicbasket('PICNIC_BASKET1')
+analyzer.plot_picnicbasket('PICNIC_BASKET2')
 
 # Access order book and trade data directly
 kelp_trades_df = analyzer.kelp_trades
