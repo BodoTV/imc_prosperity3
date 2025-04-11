@@ -425,6 +425,162 @@ class KelpStrategy(MarketMakingStrategy):
 
         return fair
 
+class GiftBasketStrategy(Strategy):
+    def __init__(self, 
+                 product: str, limit: int, 
+                 strategy_args):
+        super().__init__(product, limit)
+
+    def act(self, state: TradingState) -> None:
+        if any(product not in state.order_depths for product in ["JAM", "DJEMBE", "CROISSANT", "PICNIC_BASKET1","PICNIC_BASKET2"]):
+            return
+
+        jam = self.get_mid_price(state, "JAM")
+        djembe = self.get_mid_price(state, "DJEMBE")
+        croissant = self.get_mid_price(state, "CROISSANT")
+        gift_basket_1 = self.get_mid_price(state, "PICNIC_BASKET1")
+        gift_basket_2 = self.get_mid_price(state, "PICNIC_BASKET2")
+        
+# Calculate the fair prices of the baskets based on their components
+        fair_price_1 = (6 * croissant) + (3 * jam) + djembe
+        fair_price_2 = (4 * croissant) + (2 * jam)
+        
+        # Define an arbitrage threshold for when the price difference is significant
+        production_threshold_1 = 5  # This can be adjusted based on market volatility or expectations
+        production_threshold_2 = 5  # Same for the second basket
+
+        arbitrage_performed_1 = False
+        arbitrage_performed_2 = False
+
+        # Step 1: Check for arbitrage opportunities for PICNIC_BASKET1
+        if abs(gift_basket_1 - fair_price_1) > production_threshold_1:
+            arbitrage_performed_1 = True
+            if gift_basket_1 < fair_price_1:
+                # Basket 1 is underpriced, go long on basket 1 and short the components
+                self.go_long(state, "PICNIC_BASKET1")
+                self.go_short(state, "CROISSANT")
+                self.go_short(state, "JAM")
+                self.go_short(state, "DJEMBE")
+            elif gift_basket_1 > fair_price_1:
+                # Basket 1 is overpriced, go short on basket 1 and long the components
+                self.go_short(state, "PICNIC_BASKET1")
+                self.go_long(state, "CROISSANT")
+                self.go_long(state, "JAM")
+                self.go_long(state, "DJEMBE")
+        
+        # Step 2: Check for arbitrage opportunities for PICNIC_BASKET2
+        if abs(gift_basket_2 - fair_price_2) > production_threshold_2:
+            arbitrage_performed_2 = True
+            if gift_basket_2 < fair_price_2:
+                # Basket 2 is underpriced, go long on basket 2 and short the components
+                self.go_long(state, "PICNIC_BASKET2")
+                self.go_short(state, "CROISSANT")
+                self.go_short(state, "JAM")
+            elif gift_basket_2 > fair_price_2:
+                # Basket 2 is overpriced, go short on basket 2 and long the components
+                self.go_short(state, "PICNIC_BASKET2")
+                self.go_long(state, "CROISSANT")
+                self.go_long(state, "JAM")
+
+        # Step 3: Only perform regular trading on products not involved in arbitrage
+        #### to be implemented with market making
+        
+        # If no arbitrage performed on basket 1, trade its components
+        # if not arbitrage_performed_1:
+        #     self.go_long(state, "CROISSANT")
+        #     self.go_long(state, "JAM")
+        #     self.go_long(state, "DJEMBE")
+
+        # # If no arbitrage performed on basket 2, trade its components
+        # if not arbitrage_performed_2:
+        #     self.go_long(state, "CROISSANT")
+        #     self.go_long(state, "JAM")
+        
+        # # If no arbitrage performed for both baskets, trade the baskets themselves as well
+        # if not arbitrage_performed_1:
+        #     self.go_long(state, "PICNIC_BASKET1")
+        
+        # if not arbitrage_performed_2:
+        #     self.go_long(state, "PICNIC_BASKET2")
+
+
+        #-----here different version ----- to be implemented with explore arbitrage first and otherwise fall back to marketmaking.
+        # fair_price_1 = 6 * croissant + 3 * jam + djembe
+        # fair_price_2 = 4 * croissant + 2 * jam
+
+        # threshold_1 = 5
+        # threshold_2 = 5
+
+        # arbitrage_1 = abs(gift_basket_1 - fair_price_1) > threshold_1
+        # arbitrage_2 = abs(gift_basket_2 - fair_price_2) > threshold_2
+
+        # # Track trades per product to aggregate final trades
+        # trades = {
+        #     "CROISSANT": 0,
+        #     "JAM": 0,
+        #     "DJEMBE": 0,
+        #     "PICNIC_BASKET1": 0,
+        #     "PICNIC_BASKET2": 0
+        # }
+
+        # # ---- ARBITRAGE BASKET 1 ----
+        # if arbitrage_1:
+        #     if gift_basket_1 < fair_price_1:
+        #         trades["PICNIC_BASKET1"] += 1
+        #         trades["CROISSANT"] -= 6
+        #         trades["JAM"] -= 3
+        #         trades["DJEMBE"] -= 1
+        #     else:
+        #         trades["PICNIC_BASKET1"] -= 1
+        #         trades["CROISSANT"] += 6
+        #         trades["JAM"] += 3
+        #         trades["DJEMBE"] += 1
+
+        # # ---- ARBITRAGE BASKET 2 ----
+        # if arbitrage_2:
+        #     if gift_basket_2 < fair_price_2:
+        #         trades["PICNIC_BASKET2"] += 1
+        #         trades["CROISSANT"] -= 4
+        #         trades["JAM"] -= 2
+        #     else:
+        #         trades["PICNIC_BASKET2"] -= 1
+        #         trades["CROISSANT"] += 4
+        #         trades["JAM"] += 2
+
+        # # ---- REGULAR TRADING ----
+        # if not arbitrage_1 and not arbitrage_2:
+        #     # No arbitrage anywhere — trade all 5 products with mm
+        #     trades["CROISSANT"] += 1
+        #     trades["JAM"] += 1
+        #     trades["DJEMBE"] += 1
+        #     trades["PICNIC_BASKET1"] += 1
+        #     trades["PICNIC_BASKET2"] += 1
+
+        # elif arbitrage_1 and not arbitrage_2:
+        #     # Only arbitraged basket 1 → trade basket 2 normally
+        #     trades["PICNIC_BASKET2"] += 1
+
+        # elif arbitrage_2 and not arbitrage_1:
+        #     # Only arbitraged basket 2 → trade basket 1 and DJEMBE normally
+        #     trades["PICNIC_BASKET1"] += 1
+        #     trades["DJEMBE"] += 1
+
+        # # ---- FINAL TRADE EXECUTION ----
+        # for product, qty in trades.items():
+        #     if qty > 0:
+        #         self.go_long(state, product, qty)
+        #     elif qty < 0:
+        #         self.go_short(state, product, -qty)
+
+    def get_mid_price(self, state: TradingState, product: str) -> float:
+        order_depth = state.order_depths[product]
+        buy_orders = sorted(order_depth.buy_orders.items(), reverse=True)
+        sell_orders = sorted(order_depth.sell_orders.items())
+
+        popular_buy_price = max(buy_orders, key=lambda tup: tup[1])[0]
+        popular_sell_price = min(sell_orders, key=lambda tup: tup[1])[0]
+
+        return (popular_buy_price + popular_sell_price) / 2
 
 class Trader:
     def __init__(self, strategy_args = None) -> None:
@@ -432,7 +588,12 @@ class Trader:
         limits = {
             "RAINFOREST_RESIN": 50,
             "KELP" : 50,
-            "SQUID_INK" : 50
+            "SQUID_INK" : 50,
+            "CROISSANT": 250,
+            "JAM": 350,
+            "DJEMBE": 60,
+            "PICNIC_BASKET1": 60,
+            "PICNIC_BASKET2": 100,
         }
 
         self.strategy_args = strategy_args if strategy_args != None else {}
@@ -440,7 +601,12 @@ class Trader:
         self.strategies = { symbol : strategyClass(symbol, limits[symbol], self.strategy_args.get(symbol, {})) for symbol, strategyClass in {
             "RAINFOREST_RESIN" : RainForestResinStrategy,
             "KELP" : KelpStrategy,
-            "SQUID_INK": SquidInkStrategy
+            "SQUID_INK": SquidInkStrategy,
+            "CROISSANT": GiftBasketStrategy,
+            "JAM": GiftBasketStrategy,
+            "DJEMBE": GiftBasketStrategy,
+            "PICNIC_BASKET1": GiftBasketStrategy,
+            "PICNIC_BASKET2": GiftBasketStrategy,
         }.items()}
 
     def run(self, state: TradingState) -> tuple[dict[Symbol, list[Order]], int, str]:

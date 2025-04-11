@@ -15,11 +15,25 @@ class TradingDataAnalyzer:
         self.kelp = self.full_orderbook[self.full_orderbook['product'] == 'KELP'].copy()
         self.rainforest_resin = self.full_orderbook[self.full_orderbook['product'] == 'RAINFOREST_RESIN'].copy()
         self.squid_ink = self.full_orderbook[self.full_orderbook['product'] == 'SQUID_INK'].copy()
+        self.jams = self.full_orderbook[self.full_orderbook['product'] == 'JAMS'].copy()
+        self.croissants = self.full_orderbook[self.full_orderbook['product'] == 'CROISSANTS'].copy()
+        self.djembe = self.full_orderbook[self.full_orderbook['product'] == 'DJEMBE'].copy()
+        self.picnic_basket1 = self.full_orderbook[self.full_orderbook['product'] == 'PICNIC_BASKET1'].copy()
+        self.picnic_basket2 = self.full_orderbook[self.full_orderbook['product'] == 'PICNIC_BASKET2'].copy()
+
         self.products = {
             'KELP': self.kelp,
             'RAINFOREST_RESIN': self.rainforest_resin,
-            'SQUID_INK': self.squid_ink
-        }
+            'SQUID_INK': self.squid_ink,
+            'JAM': self.jams,
+            'CROISSANTS': self.croissants,
+            'DJEMBE': self.djembe,
+            'PICNIC_BASKET1': self.picnic_basket1,
+            'PICNIC_BASKET2': self.picnic_basket2
+            }
+
+
+        
 
         # Load and prepare trade data
         self.full_trades = pd.read_csv(trades_file_path, sep=';', na_values=[''])
@@ -32,11 +46,21 @@ class TradingDataAnalyzer:
         self.kelp_trades = trades[trades['symbol'] == 'KELP'].copy()
         self.rainforest_resin_trades = trades[trades['symbol'] == 'RAINFOREST_RESIN'].copy()
         self.squid_ink_trades = trades[trades['symbol'] == 'SQUID_INK'].copy()
+        self.jam_trades = trades[trades['symbol'] == 'JAM'].copy()
+        self.croissant_trades = trades[trades['symbol'] == 'CROISSANTS'].copy()
+        self.djembe_trades = trades[trades['symbol'] == 'DJEMBE'].copy()
+        self.picnic_basket1_trades = trades[trades['symbol'] == 'PICNIC_BASKET1'].copy()
+        self.picnic_basket2_trades = trades[trades['symbol'] == 'PICNIC_BASKET2'].copy()
 
         self.trade_products = {
             'KELP': self.kelp_trades,
             'RAINFOREST_RESIN': self.rainforest_resin_trades,
-            'SQUID_INK': self.squid_ink_trades
+            'SQUID_INK': self.squid_ink_trades,
+            'JAM': self.jam_trades,
+            'CROISSANTS': self.croissant_trades,
+            'DJEMBE': self.djembe_trades,
+            'PICNIC_BASKET1': self.picnic_basket1_trades,
+            'PICNIC_BASKET2': self.picnic_basket2_trades
         }
 
     def plot_product_price_levels(self, 
@@ -215,16 +239,16 @@ class TradingDataAnalyzer:
 
 
 # Set file paths for order book and trade data
-prices_round_1_day_0 = 'round1/round-1-island-data-bottle/prices_round_1_day_0.csv'  
-trades_round_1_day_0 = 'round1/round-1-island-data-bottle/trades_round_1_day_0.csv'  
-prices_round_1_day_1 = 'round1/round-1-island-data-bottle/prices_round_1_day_-1.csv'  
-trades_round_1_day_1 = 'round1/round-1-island-data-bottle/trades_round_1_day_-1.csv'  
-prices_round_1_day_2 = 'round1/round-1-island-data-bottle/prices_round_1_day_-2.csv'  
-trades_round_1_day_2 = 'round1/round-1-island-data-bottle/trades_round_1_day_-2.csv'  
+prices_round_2_day_0 = 'round2/round-2-island-data-bottle/prices_round_2_day_-1.csv'  
+trades_round_2_day_0 = 'round2/round-2-island-data-bottle/trades_round_2_day_-1.csv'  
+prices_round_2_day_1 = 'round2/round-2-island-data-bottle/prices_round_2_day_0.csv'  
+trades_round_2_day_1 = 'round2/round-2-island-data-bottle/trades_round_2_day_0.csv'  
+prices_round_2_day_2 = 'round2/round-2-island-data-bottle/prices_round_2_day_1.csv'  
+trades_round_2_day_2 = 'round2/round-2-island-data-bottle/trades_round_2_day_1.csv'  
 
 
 # Create instance of the analyzer
-analyzer = TradingDataAnalyzer(prices_round_1_day_1, trades_round_1_day_1)
+analyzer = TradingDataAnalyzer(prices_round_2_day_1, trades_round_2_day_1)
 
 # Plot order book price levels
 ## 'sampling_steps' in plot_product_price_levels defines how many data points to skip between adjacently plotted points
@@ -233,15 +257,15 @@ sampling_option2 = [10, 10, 10, 10, 10, 10, 10]
 
 ## 'bids'/'asks' in plot_product_price_levels defines which price levels to plot choosing from bid_price_1, ask_price_1, bid_price_2 etc.
 
-analyzer.plot_product_price_levels(['SQUID_INK', 'KELP'], 
+analyzer.plot_product_price_levels(['JAM', 'CROISSANTS', 'DJEMBE', 'PICNIC_BASKET1','PICNIC_BASKET2'], 
                                    bids=[1,2,3], 
                                    asks=[1,2,3], 
                                    sampling_steps=sampling_option1,
-                                   show_trades=True,
+                                   show_trades=False,
                                    quantity_threshold=5,
                                    separate_subplots=True,
                                    match_cross_product_trades=True,
-                                   show_only_cross_product_trade_quotes=True)
+                                   show_only_cross_product_trade_quotes=False)
 
 analyzer.plot_price_vs_volume(['SQUID_INK', 'KELP'], ['Bid1','Bid2'])
 # Access order book and trade data directly
