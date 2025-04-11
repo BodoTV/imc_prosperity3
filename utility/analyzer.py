@@ -45,7 +45,6 @@ class TradingDataAnalyzer:
                                   sampling_steps=None, 
                                   show_trades=True, 
                                   quantity_threshold=None,
-                                  separate_subplots=False,
                                   match_cross_product_trades=False,
                                   show_only_cross_product_trade_quotes=False):
         """
@@ -93,7 +92,7 @@ class TradingDataAnalyzer:
         assert len(sampling_steps) == 7, "sampling_steps must be a list of 7 integers."
 
         n = len(product_names)
-        fig, axes = plt.subplots(n if separate_subplots else 1, 1, figsize=(14, 5 * n), sharex=not separate_subplots)
+        fig, axes = plt.subplots(n, 1, figsize=(14, 5 * n), sharex=True)
         if not isinstance(axes, np.ndarray):
             axes = [axes]
 
@@ -238,18 +237,17 @@ analyzer.plot_product_price_levels(['SQUID_INK', 'KELP'],
                                    asks=[1,2,3], 
                                    sampling_steps=sampling_option1,
                                    show_trades=True,
-                                   quantity_threshold=5,
-                                   separate_subplots=True,
+                                   quantity_threshold=1,
                                    match_cross_product_trades=True,
                                    show_only_cross_product_trade_quotes=True)
 
-analyzer.plot_price_vs_volume(['SQUID_INK', 'KELP'], ['Bid1','Bid2'])
+
 # Access order book and trade data directly
 kelp_trades_df = analyzer.kelp_trades
 kelp_orders_df = analyzer.kelp
 
 #print(analyzer.full_trades)
 
-print(kelp_trades_df[kelp_trades_df['quantity'] > 12].head(50))
+#print(kelp_trades_df[kelp_trades_df['quantity'] > 12].head(50))
 
 plt.show()
