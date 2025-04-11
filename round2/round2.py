@@ -326,17 +326,18 @@ class MarketMakingStrategy(Strategy):
     def load(self, data : JSON) -> None:
         self.history = deque(data)
 
-class GiftBasketStrategy(Strategy):
+class PicnicBasketStrategy(Strategy):
     def __init__(self, 
                  product: str, limit: int, 
                  strategy_args):
         super().__init__(product, limit)
 
-        self.diff1_price_history = deque(maxlen=10)
-        self.diff2_price_history = deque(maxlen=10)
+        self.long_thresh = strategy_args.get("long_thresh", -50)
+        self.short_thresh = strategy_args.get("short_thresh", 100)
+
 
     def act(self, state: TradingState) -> None:
-        if any(product not in state.order_depths for product in ["CROISSANS", "JAMS", "DJEMBES", "PICNIC_BASKET1", "PICNIC_BASKET2"]):
+        if any(product not in state.order_depths for product in ["CROISSANTS", "JAMS", "DJEMBES", "PICNIC_BASKET1", "PICNIC_BASKET2"]):
             return
 
         croissant = self.get_mid_price(state, "CROISSANTS")
@@ -348,37 +349,13 @@ class GiftBasketStrategy(Strategy):
         diff1 = picnic_basket1 - 6 * croissant - 3 * jam - djembe
         diff2 = picnic_basket2 - 4 * croissant - 2 * jam
 
-        self.diff1_price_history.append(diff1)
 
-        if len(diff1) < 5:
-            current_diff = diff1
-        else:
-            current_diff = np.mean(self.diff1_price_history)
-        
-        if diff1 > current_diff:
+        long_threshold, short_threshold =-self.long_thresh, self.short_thresh
+
+        if diff1 < long_threshold:
             self.go_long(state)
-        else:
+        elif diff1 > short_threshold:
             self.go_short(state)
-
-
-        
-        #if diff < 260:
-        #    self.go_long(state)
-        #elif diff > 355:
-        #    self.go_short(state)
-
-
-        #long_threshold, short_threshold = {
-        #    "CHOCOLATE": (230, 355),
-        #    "STRAWBERRIES": (195, 485),
-        #    "ROSES": (325, 370),
-        #    "GIFT_BASKET": (290, 355),
-        #}[self.product]
-
-        #if diff < long_threshold:
-        #    self.go_long(state)
-        #elif diff > short_threshold:
-        #    self.go_short(state)
 
         # premium, threshold = {
         #     "CHOCOLATE": (285, 0.19),
@@ -537,7 +514,7 @@ class Trader:
             "JAMS": 350,
             "DJEMBES": 60,
             "PICNIC_BASKET1": 6,
-            "PICNIC_BASKET2": 100
+            "PICNIC_BASKET2": 100,
         }
 
         self.strategy_args = strategy_args if strategy_args != None else {}
@@ -546,11 +523,11 @@ class Trader:
             "RAINFOREST_RESIN" : RainForestResinStrategy,
             "KELP" : KelpStrategy,
             "SQUID_INK": SquidInkStrategy,
-            "CROISSANTS": GiftBasketStrategy,
-            "JAMS": GiftBasketStrategy,
-            "DJEMBES": GiftBasketStrategy,
-            "PICNIC_BASKET1": GiftBasketStrategy,
-            "PICNIC_BASKET2": GiftBasketStrategy
+            "CROISSANTS": PicnicBasketStrategy,
+            "JAMS": PicnicBasketStrategy,
+            "DJEMBES": PicnicBasketStrategy,
+            "PICNIC_BASKET1": PicnicBasketStrategy,
+            #"PICNIC_BASKET2": PicnicBasketStrategy,
 
         }.items()}
 
