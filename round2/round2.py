@@ -336,12 +336,12 @@ class GiftBasketStrategy(Strategy):
         self.diff2_price_history = deque(maxlen=10)
 
     def act(self, state: TradingState) -> None:
-        if any(product not in state.order_depths for product in ["CROISSANT", "JAM", "DJEMBE", "PICNIC_BASKET1", "PICNIC_BASKET2"]):
+        if any(product not in state.order_depths for product in ["CROISSANS", "JAMS", "DJEMBES", "PICNIC_BASKET1", "PICNIC_BASKET2"]):
             return
 
-        croissant = self.get_mid_price(state, "CROISSANT")
-        jam = self.get_mid_price(state, "JAM")
-        djembe = self.get_mid_price(state, "DJEMBE")
+        croissant = self.get_mid_price(state, "CROISSANTS")
+        jam = self.get_mid_price(state, "JAMS")
+        djembe = self.get_mid_price(state, "DJEMBES")
         picnic_basket1 = self.get_mid_price(state, "PICNIC_BASKET1")
         picnic_basket2 = self.get_mid_price(state, "PICNIC_BASKET2")
 
@@ -533,9 +533,9 @@ class Trader:
             "RAINFOREST_RESIN": 50,
             "KELP" : 50,
             "SQUID_INK" : 50,
-            "CROISSANT": 250,
-            "JAM": 350,
-            "DJEMBE": 60,
+            "CROISSANTS": 250,
+            "JAMS": 350,
+            "DJEMBES": 60,
             "PICNIC_BASKET1": 6,
             "PICNIC_BASKET2": 100
         }
@@ -545,7 +545,13 @@ class Trader:
         self.strategies = { symbol : strategyClass(symbol, limits[symbol], self.strategy_args.get(symbol, {})) for symbol, strategyClass in {
             "RAINFOREST_RESIN" : RainForestResinStrategy,
             "KELP" : KelpStrategy,
-            "SQUID_INK": SquidInkStrategy
+            "SQUID_INK": SquidInkStrategy,
+            "CROISSANTS": GiftBasketStrategy,
+            "JAMS": GiftBasketStrategy,
+            "DJEMBES": GiftBasketStrategy,
+            "PICNIC_BASKET1": GiftBasketStrategy,
+            "PICNIC_BASKET2": GiftBasketStrategy
+
         }.items()}
 
     def run(self, state: TradingState) -> tuple[dict[Symbol, list[Order]], int, str]:
