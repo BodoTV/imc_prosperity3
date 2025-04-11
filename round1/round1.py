@@ -158,13 +158,51 @@ class MarketMakingStrategy(Strategy):
         super().__init__(product, limit)
 
         self.history = deque()
-        self.mid_price_history = deque()
+        self.mid_price_history = deque(maxlen=10)
 
         self.EMA_alpha = strategy_args.get("EMA_alpha", 0.32)
         self.history_size = strategy_args.get("history_size", 10)
         self.soft_liquidate_thresh = strategy_args.get("soft_liquidation_tresh", 0.5)
+        self.volatility_multiplier = strategy_args.get("volatility_multiplier", 1.0)
+
+        self.beta_reversion = strategy_args.get("beta_reversion", 0.369)
+        self.volume_threshold = strategy_args.get("volume_threshold", 12) #for indentifying the market maker
+        self.last_mm_mid_price = None #in this parameter we store the last mid_price if no new midprice can be calculated
 
         self.EMA = None
+
+    def get_popular_average(self, state : TradingState) -> int:
+        #calculate the average between the most popular buy and sell price
+        order_depths = state.order_depths[self.product]
+        sell_orders = order_depths.sell_orders.items()
+        buy_orders = order_depths.buy_orders.items()
+
+        most_popular_sell_price = min(sell_orders, key = lambda item : item[1])[0]
+        most_popular_buy_price = max(buy_orders, key = lambda item : item[1])[0]
+        
+        #calculate average of those prices
+        return (most_popular_buy_price + most_popular_sell_price)//2
+
+    #returns and updates the current EMA
+    def get_EMA(self, state : TradingState) -> float:
+
+        average_price = self.get_popular_average(state)
+
+        alpha = self.EMA_alpha
+
+        if self.EMA == None:
+            self.EMA = average_price
+        else:
+            self.EMA = average_price * alpha + (1 - alpha) * self.EMA
+
+        return self.EMA
+    
+    #estimates volatility as std from the last 20 mid prices
+    def estimate_volatility(self):
+        if len(self.mid_price_history)<5:
+            return 0
+        return np.std(self.mid_price_history)
+    
 
     def act(self, state: TradingState) -> None:
         ##Logic
@@ -173,13 +211,20 @@ class MarketMakingStrategy(Strategy):
         buy_orders = sorted(state.order_depths[self.product].buy_orders.items(), reverse = True)
         sell_orders = sorted(state.order_depths[self.product].sell_orders.items())
 
-        position = state.position.get(self.product, 0)
+        #use the mid_price to calculate a volatility
+        mid_price = self.get_popular_average(state)
+        self.mid_price_history.append(mid_price)
+        volatility = self.estimate_volatility()
 
         #how much we can buy/sell of this specific product
+        position = state.position.get(self.product, 0)
         to_buy = self.limit - position
         to_sell = self.limit + position
 
         default_price = self.get_default_price(state)
+
+        #calculate a spread_corr depending on the volatility
+        spread_corr = round(self.volatility_multiplier * volatility)
 
         #if we are completely short or long than add a true to the history
         self.history.append(abs(position) == self.limit)
@@ -198,10 +243,10 @@ class MarketMakingStrategy(Strategy):
         #we can regulate the prob. of buying and selling by increasing/decreasing the max_buy_price/min_sell_price
 
         #buy less likely if position to long
-        max_buy_price = default_price - 1 if position > self.limit * 0.5 else default_price
+        max_buy_price = default_price - 1 - spread_corr if position > self.limit * 0.5 else default_price - spread_corr
 
         #sell less likely if position is to short
-        min_sell_price = default_price + 1 if position < self.limit * -0.5 else default_price  
+        min_sell_price = default_price + 1 + spread_corr if position < self.limit * -0.5 else default_price + spread_corr
 
         #buy as much as possible below the max_buy_price starting with cheaper offers first
         for price, volume in sell_orders:
@@ -281,44 +326,105 @@ class MarketMakingStrategy(Strategy):
     def load(self, data : JSON) -> None:
         self.history = deque(data)
 
-    def get_popular_average(self, state : TradingState) -> int:
-        #calculate the average between the most popular buy and sell price
-        order_depths = state.order_depths[self.product]
-        sell_orders = order_depths.sell_orders.items()
-        buy_orders = order_depths.buy_orders.items()
-
-        most_popular_sell_price = min(sell_orders, key = lambda item : item[1])[0]
-        most_popular_buy_price = max(buy_orders, key = lambda item : item[1])[0]
-        
-        #calculate average of those prices
-        return (most_popular_buy_price + most_popular_sell_price)//2
-
-    #returns and updates the current EMA
-    def get_EMA(self, state : TradingState) -> float:
-
-        average_price = self.get_popular_average(state)
-
-        alpha = self.EMA_alpha
-
-        if self.EMA == None:
-            self.EMA = average_price
-        else:
-            self.EMA = average_price * alpha + (1 - alpha) * self.EMA
-
-        return self.EMA
 
 class RainForestResinStrategy(MarketMakingStrategy):
     def get_default_price(self, state: TradingState) -> int:
         return 10_000
 
 class SquidInkStrategy(MarketMakingStrategy):
-    def get_default_price(self, state):
-        return self.get_popular_average(state)
+    def get_default_price(self, state) -> float:
+        
+        #return self.get_popular_average(state)
+
+        order_depth = state.order_depths[self.product]
+
+        #this gets the cheapest price we can buy at, and the highest price we can sell at
+        best_ask = min(order_depth.sell_orders.keys())
+        best_bid = max(order_depth.buy_orders.keys())
+        #creates a list of the prices of orders with high volumes --> market maker prices
+        filtered_ask =  [price for price in order_depth.sell_orders.keys()
+                         if abs(order_depth.sell_orders[price])
+                         >= self.volume_threshold]
+
+        filtered_bid = [price for price in order_depth.buy_orders.keys()
+                         if abs(order_depth.buy_orders[price])
+                         >= self.volume_threshold]
+
+        #defines the ask and bid of the market maker as the best ask and bid of those prices        
+        mm_ask = min(filtered_ask) if len(filtered_ask) > 0 else None
+        mm_bid = max(filtered_bid) if len(filtered_bid) > 0 else None
+
+        #if there is no market maker
+        if mm_ask == None or mm_bid == None:
+            if self.last_mm_mid_price == None:
+                mm_mid_price = (best_ask + best_bid)/2
+            else:
+                mm_mid_price = self.last_mm_mid_price
+
+        else:
+            mm_mid_price = (mm_ask + mm_bid)/2
+
+        #mean reversion
+        if self.last_mm_mid_price != None:
+            last_price = self.last_mm_mid_price
+            last_returns = (mm_mid_price - last_price) / last_price
+            pred_returns = ( 
+                last_returns * -0.369 #this tries to predict how much 
+            )
+            fair = mm_mid_price + (mm_mid_price * pred_returns)
+        else:
+            fair = mm_mid_price
+
+        self.last_mm_mid_price = mm_mid_price
+
+        return fair
 
 class KelpStrategy(MarketMakingStrategy):
     #for kelp try a marketmaking strategy with a dynamic default price
     def get_default_price(self, state: TradingState) -> int:
-        return self.get_EMA(state)
+        order_depth = state.order_depths[self.product]
+
+        #this gets the cheapest price we can buy at, and the highest price we can sell at
+        best_ask = min(order_depth.sell_orders.keys())
+        best_bid = max(order_depth.buy_orders.keys())
+        #creates a list of the prices of orders with high volumes --> market maker prices
+        filtered_ask =  [price for price in order_depth.sell_orders.keys()
+                         if abs(order_depth.sell_orders[price])
+                         >= self.volume_threshold]
+
+        filtered_bid = [price for price in order_depth.buy_orders.keys()
+                         if abs(order_depth.buy_orders[price])
+                         >= self.volume_threshold]
+
+        #defines the ask and bid of the market maker as the best ask and bid of those prices        
+        mm_ask = min(filtered_ask) if len(filtered_ask) > 0 else None
+        mm_bid = max(filtered_bid) if len(filtered_bid) > 0 else None
+
+        #if there is no market maker
+        if mm_ask == None or mm_bid == None:
+            if self.last_mm_mid_price == None:
+                mm_mid_price = (best_ask + best_bid)/2
+            else:
+                mm_mid_price = self.last_mm_mid_price
+
+        else:
+            mm_mid_price = (mm_ask + mm_bid)/2
+
+        #mean reversion
+        if self.last_mm_mid_price != None:
+            last_price = self.last_mm_mid_price
+            last_returns = (mm_mid_price - last_price) / last_price
+            pred_returns = ( 
+                last_returns * -0.5 #this tries to predict how much 
+            )
+            fair = mm_mid_price + (mm_mid_price * pred_returns)
+        else:
+            fair = mm_mid_price
+
+        self.last_mm_mid_price = mm_mid_price
+
+        return fair
+
 
 class Trader:
     def __init__(self, strategy_args = None) -> None:
