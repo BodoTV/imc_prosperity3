@@ -326,6 +326,65 @@ class MarketMakingStrategy(Strategy):
     def load(self, data : JSON) -> None:
         self.history = deque(data)
 
+class PicnicBasketStrategy(Strategy):
+    def __init__(self, 
+                 product: str, limit: int, 
+                 strategy_args):
+        super().__init__(product, limit)
+    def act(self, state: TradingState):
+        if any(symbol not in state.order_depths for symbol in ['PICNIC_BASKET1','CROISSANTS','JAMS','DJEMBE']):
+            return
+
+        #calculate the current mid-price for all products
+        mp_pb1 = self.get_popular_average[state, 'PICNIC_BASKET1']
+        mp_croissants = self.get_popular_average[state, 'CROISSANTS']
+        mp_jams = self.get_popular_average[state, 'JAMS']
+        mp_djembe = self.get_popular_average[state, 'DJEMBE']
+
+        diff1 = mp_pb1 - 6 * mp_croissants - 3 * mp_jams - 1 * mp_djembe
+
+        long_threshold, short_threshold = {
+            "CROISSANTS": (230, 355),
+            "JAMS": (195, 485),
+            "DJEMBE": (325, 370),
+            "PICNIC_BASKET1": (290, 355),
+        }[self.product]
+
+        if diff1 < long_threshold:
+            self.go_long(state)
+        elif diff1 > short_threshold:
+            self.go_short(state)
+
+    def get_popular_average(self, state : TradingState, product: str) -> int:
+        #calculate the average between the most popular buy and sell price
+        order_depths = state.order_depths[product]
+        sell_orders = order_depths.sell_orders.items()
+        buy_orders = order_depths.buy_orders.items()
+
+        most_popular_sell_price = min(sell_orders, key = lambda item : item[1])[0]
+        most_popular_buy_price = max(buy_orders, key = lambda item : item[1])[0]
+        
+        #calculate average of those prices
+        return (most_popular_buy_price + most_popular_sell_price)//2
+    
+    def go_long(self, state: TradingState) -> None:
+        order_depth = state.order_depths[self.product]
+        price = max(order_depth.sell_orders.keys())
+
+        position = state.position.get(self.product, 0)
+        to_buy = self.limit - position
+
+        self.buy(price, to_buy)
+
+    def go_short(self, state: TradingState) -> None:
+        order_depth = state.order_depths[self.product]
+        price = min(order_depth.buy_orders.keys())
+
+        position = state.position.get(self.product, 0)
+        to_sell = self.limit + position
+
+        self.sell(price, to_sell)
+    
 
 class RainForestResinStrategy(MarketMakingStrategy):
     def get_default_price(self, state: TradingState) -> int:
@@ -432,7 +491,12 @@ class Trader:
         limits = {
             "RAINFOREST_RESIN": 50,
             "KELP" : 50,
-            "SQUID_INK" : 50
+            "SQUID_INK" : 50,
+            "CROISSANT": 250,
+            "JAM": 350,
+            "DJEMBE": 60,
+            "PICNIC_BASKET1": 60,
+            "PICNIC_BASKET2": 100
         }
 
         self.strategy_args = strategy_args if strategy_args != None else {}
@@ -440,7 +504,11 @@ class Trader:
         self.strategies = { symbol : strategyClass(symbol, limits[symbol], self.strategy_args.get(symbol, {})) for symbol, strategyClass in {
             "RAINFOREST_RESIN" : RainForestResinStrategy,
             "KELP" : KelpStrategy,
-            "SQUID_INK": SquidInkStrategy
+            "SQUID_INK": SquidInkStrategy,
+            "CROISSANT": PicnicBasketStrategy,
+            "JAM": PicnicBasketStrategy,
+            "DJEMBE": PicnicBasketStrategy,
+            "PICNIC_BASKET1": PicnicBasketStrategy
         }.items()}
 
     def run(self, state: TradingState) -> tuple[dict[Symbol, list[Order]], int, str]:
