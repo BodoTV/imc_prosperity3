@@ -326,6 +326,107 @@ class MarketMakingStrategy(Strategy):
     def load(self, data : JSON) -> None:
         self.history = deque(data)
 
+class GiftBasketStrategy(Strategy):
+     def __init__(self, 
+                 product: str, limit: int, 
+                 strategy_args):
+        super().__init__(product, limit)
+
+        self.diff1_price_history = deque(maxlen=10)
+        self.diff2_price_history = deque(maxlen=10)
+
+    def act(self, state: TradingState) -> None:
+        if any(product not in state.order_depths for product in ["CROISSANT", "JAM", "DJEMBE", "PICNIC_BASKET1", "PICNIC_BASKET2"]):
+            return
+
+        croissant = self.get_mid_price(state, "CROISSANT")
+        jam = self.get_mid_price(state, "JAM")
+        djembe = self.get_mid_price(state, "DJEMBE")
+        picnic_basket1 = self.get_mid_price(state, "PICNIC_BASKET1")
+        picnic_basket2 = self.get_mid_price(state, "PICNIC_BASKET2")
+
+        diff1 = picnic_basket1 - 6 * croissant - 3 * jam - djembe
+        diff2 = picnic_basket2 - 4 * croissant - 2 * jam
+
+        self.diff1_price_history.append(diff1)
+
+        if len(diff1) < 5
+            current_diff = diff1
+        else:
+            current_diff = np.mean(self.diff1_price_history)
+        
+        if diff1 > current_diff:
+            self.go_long(state)
+        else:
+            self.go_short(state)
+
+
+        
+        #if diff < 260:
+        #    self.go_long(state)
+        #elif diff > 355:
+        #    self.go_short(state)
+
+
+        long_threshold, short_threshold = {
+            "CHOCOLATE": (230, 355),
+            "STRAWBERRIES": (195, 485),
+            "ROSES": (325, 370),
+            "GIFT_BASKET": (290, 355),
+        }[self.product]
+
+        if diff < long_threshold:
+            self.go_long(state)
+        elif diff > short_threshold:
+            self.go_short(state)
+
+
+        # premium, threshold = {
+        #     "CHOCOLATE": (285, 0.19),
+        #     "STRAWBERRIES": (340, 0.43),
+        #     "ROSES": (350, 0.05),
+        #     "GIFT_BASKET": (325, 0.12),
+        # }[self.product]
+
+        # if diff < premium * (1.0 - threshold):
+        #     self.go_long(state)
+        # elif diff > premium * (1.0 + threshold):
+        #     self.go_short(state)
+
+        # if diff < 355 * 0.9:
+        #     self.go_long(state)
+        # elif diff > 355 * 1.1:
+        #     self.go_short(state)
+
+    def get_mid_price(self, state: TradingState, symbol: str) -> float:
+        order_depth = state.order_depths[symbol]
+        buy_orders = sorted(order_depth.buy_orders.items(), reverse=True)
+        sell_orders = sorted(order_depth.sell_orders.items())
+
+        popular_buy_price = max(buy_orders, key=lambda tup: tup[1])[0]
+        popular_sell_price = min(sell_orders, key=lambda tup: tup[1])[0]
+
+        return (popular_buy_price + popular_sell_price) / 2
+
+    def go_long(self, state: TradingState) -> None:
+        order_depth = state.order_depths[self.product]
+        price = max(order_depth.sell_orders.keys())
+
+        position = state.position.get(self.product, 0)
+        to_buy = self.limit - position
+
+        self.buy(price, to_buy)
+
+    def go_short(self, state: TradingState) -> None:
+        order_depth = state.order_depths[self.product]
+        price = min(order_depth.buy_orders.keys())
+
+        position = state.position.get(self.product, 0)
+        to_sell = self.limit + position
+
+        self.sell(price, to_sell)
+
+
 
 class RainForestResinStrategy(MarketMakingStrategy):
     def get_default_price(self, state: TradingState) -> int:
